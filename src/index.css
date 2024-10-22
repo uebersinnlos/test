@@ -129,9 +129,9 @@ tailwind\layer base {
 
 tailwind\layer base {
   * {
-    border-border;
+    tailwind\apply:border-border;
   }
   body {
-    bg-background text-foreground;
+    tailwind\apply:bg-background text-foreground;
   }
 }

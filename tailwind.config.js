@@ -1,4 +1,4 @@
-module.exports = {
+export default {
   content: [
     './src/**/*.{js,ts,jsx,tsx}', // Adjust paths as per your project structure
   ],
