@@ -1,5 +1,7 @@
 import axios from 'axios';
-import { load, dump } from 'js-yaml';
+import 'tailwindcss/base.css';
+import 'tailwindcss/components.css';
+import 'tailwindcss/utilities.css';
 
 const API_URL = 'http://localhost:3001/api';
 

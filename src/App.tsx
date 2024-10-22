@@ -1,6 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { getServers, addServer, updateServer, importYAML, exportYAML } from './db';
-import { Download, Plus, Search, Upload, Edit } from 'lucide-react';
+import { Download, Plus, Search, Upload, Edit, X } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./components/ui/table";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./components/ui/dialog";
+import { ScrollArea } from "./components/ui/scroll-area";
+import { Label } from "./components/ui/label";
 
 interface Server {
   id?: number;
@@ -63,7 +83,17 @@ const INITIAL_SERVER: Omit<Server, 'id'> = {
   service: ''
 };
 
-const COLUMNS = [
+// Only show the most important columns in the main view
+const VISIBLE_COLUMNS = [
+  { key: 'serverName', label: 'Server' },
+  { key: 'standort', label: 'Standort' },
+  { key: 'kunde', label: 'Kunde' },
+  { key: 'betriebssystem', label: 'Betriebssystem' },
+  { key: 'dbms', label: 'DBMS' },
+  { key: 'service', label: 'Service' }
+];
+
+const ALL_COLUMNS = [
   { key: 'serverName', label: 'Server' },
   { key: 'standort', label: 'Standort' },
   { key: 'dmz', label: 'DMZ' },
@@ -93,15 +123,52 @@ const COLUMNS = [
   { key: 'service', label: 'Service' }
 ];
 
+function ServerForm({ 
+  data, 
+  onSubmit, 
+  onClose 
+}: { 
+  data: Partial<Server>; 
+  onSubmit: (e: React.FormEvent) => void;
+  onClose: () => void;
+}) {
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        {ALL_COLUMNS.map(col => (
+          <div key={col.key} className="space-y-2">
+            <Label htmlFor={col.key}>{col.label}</Label>
+            <Input
+              id={col.key}
+              type="text"
+              value={data[col.key as keyof Server] || ''}
+              onChange={(e) => data.onChange?.({ ...data, [col.key]: e.target.value })}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-end space-x-2">
+        <Button type="button"  onClick={onClose}>
+          Abbrechen
+        </Button>
+        <Button type="submit">
+          {data.id ? 'Aktualisieren' : 'Hinzufügen'}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function App() {
   const [servers, setServers] = useState<Server[]>([]);
   const [newServer, setNewServer] = useState<Omit<Server, 'id'>>(INITIAL_SERVER);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<Record<string, string>>(
-    Object.fromEntries(COLUMNS.map(col => [col.key, '']))
+    Object.fromEntries(VISIBLE_COLUMNS.map(col => [col.key, '']))
   );
-  const [showForm, setShowForm] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   useEffect(() => {
     fetchServers();
@@ -118,7 +185,7 @@ function App() {
       await addServer(newServer);
       await fetchServers();
       setNewServer(INITIAL_SERVER);
-      setShowForm(false);
+      setShowAddDialog(false);
     }
   };
 
@@ -128,29 +195,25 @@ function App() {
       await updateServer(editingServer);
       await fetchServers();
       setEditingServer(null);
+      setShowEditDialog(false);
     }
   };
 
   const filteredServers = servers.filter((server) => {
-    return COLUMNS.every(col => 
+    const matchesSearch = searchQuery === '' || 
+      Object.values(server).some(value => 
+        String(value).toLowerCase().includes(searchQuery.toLowerCase())
+      );
+
+    const matchesFilters = VISIBLE_COLUMNS.every(col => 
+      filters[col.key] === '' ||
       String(server[col.key as keyof Server])
         .toLowerCase()
         .includes(filters[col.key].toLowerCase())
     );
-  });
 
-  const handleSearch = async () => {
-    if (searchQuery.trim()) {
-      const results = await getServers();
-      setServers(results.filter(server => 
-        Object.values(server).some(value => 
-          String(value).toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      ));
-    } else {
-      await fetchServers();
-    }
-  };
+    return matchesSearch && matchesFilters;
+  });
 
   const handleYAMLUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -178,101 +241,128 @@ function App() {
     document.body.removeChild(link);
   };
 
-  const renderForm = (data: Partial<Server>, setData: (data: any) => void, submitHandler: (e: React.FormEvent) => void, formTitle: string) => (
-    <form onSubmit={submitHandler} className="mb-8 grid grid-cols-3 gap-4 bg-green-100 p-8 rounded">
-      {COLUMNS.map(col => (
-        <div key={col.key} className="flex flex-col">
-          <label className="text-sm font-medium text-gray-700">{col.label}</label>
-          <input
-            type="text"
-            value={data[col.key as keyof Server] || ''}
-            onChange={(e) => setData({ ...data, [col.key]: e.target.value })}
-            className="border rounded p-2 mt-1"
-          />
-        </div>
-      ))}
-      <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors flex items-center justify-center col-span-3">
-        <Plus size={20} className="mr-2" />
-        {formTitle}
-      </button>
-    </form>
-  );
-
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-full mx-auto bg-white rounded-lg shadow-md p-6">
-        <h1 className="text-3xl font-bold mb-6 text-center text-gray-800">Serverübersicht MxSQL</h1>
+    <div className="min-h-screen bg-background p-8">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-3xl font-bold text-center">
+            Serverübersicht MxSQL
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-2">
+              <div className="flex-1">
+                <Input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Server suchen..."
+                  className="w-full"
+                />
+              </div>
+              <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Server hinzufügen
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Neuen Server hinzufügen</DialogTitle>
+                  </DialogHeader>
+                  <ServerForm 
+                    data={newServer} 
+                    onSubmit={handleAddServer}
+                    onClose={() => setShowAddDialog(false)}
+                  />
+                </DialogContent>
+              </Dialog>
+              <label className="cursor-pointer">
+                <Button>
+                  <span>
+                    <Upload className="mr-2 h-4 w-4" />
+                    YAML importieren
+                  </span>
+                </Button>
+                <input
+                  type="file"
+                  accept=".yaml,.yml"
+                  onChange={handleYAMLUpload}
+                  className="hidden"
+                />
+              </label>
+              <Button  onClick={handleExportYAML}>
+                <Download className="mr-2 h-4 w-4" />
+                YAML exportieren
+              </Button>
+            </div>
 
-        <div className="mb-4 flex flex-wrap gap-2">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Server suchen..."
-            className="border rounded p-2 flex-grow"
-          />
-          <button onClick={handleSearch} className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors flex items-center justify-center">
-            <Search size={20} className="mr-2" />
-            Suchen
-          </button>
+            <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Server bearbeiten</DialogTitle>
+                </DialogHeader>
+                {editingServer && (
+                  <ServerForm 
+                    data={editingServer} 
+                    onSubmit={handleUpdateServer}
+                    onClose={() => setShowEditDialog(false)}
+                  />
+                )}
+              </DialogContent>
+            </Dialog>
 
-          <button type="button" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors flex items-center justify-center" onClick={() => setShowForm(!showForm)}>
-            <Plus size={20} className="mr-2" />
-            {showForm ? 'Ausblenden' : 'Server hinzufügen'}
-          </button>
-
-          <label className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 transition-colors flex items-center justify-center cursor-pointer">
-            <Upload size={20} className="mr-2" />
-            YAML importieren
-            <input type="file" accept=".yaml,.yml" onChange={handleYAMLUpload} className="hidden" />
-          </label>
-          <button onClick={handleExportYAML} className="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 transition-colors flex items-center justify-center">
-            <Download size={20} className="mr-2" />
-            YAML exportieren
-          </button>
-        </div>
-
-        {showForm && renderForm(newServer, setNewServer, handleAddServer, "Server hinzufügen")}
-        {editingServer && renderForm(editingServer, setEditingServer, handleUpdateServer, "Server aktualisieren")}
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-white">
-            <thead>
-              <tr>
-                {COLUMNS.map(col => (
-                  <th key={col.key} className="px-4 py-2 bg-slate-600 text-left text-white">
-                    {col.label}
-                    <input
-                      type="text"
-                      value={filters[col.key]}
-                      onChange={(e) => setFilters({ ...filters, [col.key]: e.target.value })}
-                      placeholder="Filtern"
-                      className="border rounded p-1 mt-2 w-full text-slate-600"
-                    />
-                  </th>
-                ))}
-                <th className="px-4 py-2 bg-slate-600 text-left text-white">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredServers.map((server) => (
-                <tr key={server.id} className="border-b hover:bg-gray-50">
-                  {COLUMNS.map(col => (
-                    <td key={col.key} className="px-4 py-2">
-                      {server[col.key as keyof Server]}
-                    </td>
+            <ScrollArea className="h-[60vh]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {VISIBLE_COLUMNS.map(col => (
+                      <TableHead key={col.key}>
+                        <div className="space-y-2">
+                          <div>{col.label}</div>
+                          <Input
+                            type="text"
+                            value={filters[col.key]}
+                            onChange={(e) => setFilters({ ...filters, [col.key]: e.target.value })}
+                            placeholder="Filtern"
+                            className="w-full"
+                          />
+                        </div>
+                      </TableHead>
+                    ))}
+                    <TableHead>Aktionen</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredServers.map((server) => (
+                    <TableRow key={server.id}>
+                      {VISIBLE_COLUMNS.map(col => (
+                        <TableCell key={col.key}>
+                          {server[col.key as keyof Server]}
+                        </TableCell>
+                      ))}
+                      <TableCell>
+                        <Button
+                          
+                         
+                          onClick={() => {
+                            setEditingServer(server);
+                            setShowEditDialog(true);
+                          }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                  <td className="px-4 py-2">
-                    <button onClick={() => setEditingServer(server)} className="text-blue-500 hover:text-blue-700">
-                      <Edit size={20} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
